@@ -2,6 +2,7 @@
 // State management for simulation functionality
 
 import { create } from 'zustand';
+import { processAlertAction } from '../services/alert-service';
 import { logAlert } from '../services/database';
 import { createThresholdAlert } from '../services/notificationService';
 import { generateSensorData } from '../services/sensorSimulator';
