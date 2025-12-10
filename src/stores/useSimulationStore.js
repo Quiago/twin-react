@@ -3,7 +3,7 @@
 
 import { create } from 'zustand';
 import { logAlert } from '../services/database';
-import { createThresholdAlert, sendEmail, sendWebhook, sendWhatsApp } from '../services/notificationService';
+import { createThresholdAlert } from '../services/notificationService';
 import { generateSensorData } from '../services/sensorSimulator';
 import { buildAdjacencyMap, evaluateCondition } from '../services/workflowEngine';
 
@@ -161,56 +161,51 @@ const useSimulationStore = create((set, get) => ({
         const equipmentName = triggerNode.data?.label || 'Equipment';
         const severity = actionConfig.severity || 'warning';
 
-        const alertContent = createThresholdAlert({
-            equipmentName,
+        // Prepare alert data
+        const alertData = {
+            equipment: equipmentName,
             sensor: sensorType,
             value,
             threshold,
-            unit: actionConfig.unit || '',
             severity,
-        });
+        };
 
-        let result = null;
+        let results = [];
         let recipient = '';
 
-        switch (actionType) {
-            case 'whatsapp':
-                recipient = actionConfig.phone_number || '';
-                if (recipient) {
-                    result = await sendWhatsApp(recipient, alertContent.text);
-                    console.log(`[WHATSAPP] Sent to ${recipient}`);
-                }
-                break;
-
-            case 'email':
-                recipient = actionConfig.email || '';
-                if (recipient) {
-                    result = await sendEmail(recipient, alertContent.subject, alertContent.text);
-                    console.log(`[EMAIL] Sent to ${recipient}`);
-                }
-                break;
-
-            case 'alert':
-                recipient = 'system';
-                result = { success: true, message_id: 'system' };
-                console.log(`[SYSTEM ALERT] ${alertContent.subject}`);
-                break;
-
-            case 'webhook':
-                recipient = actionConfig.webhook_url || '';
-                if (recipient) {
-                    result = await sendWebhook(recipient, {
-                        equipment: equipmentName,
-                        sensor: sensorType,
-                        value,
-                        threshold,
-                        severity,
-                        timestamp: new Date().toISOString(),
-                    });
-                    console.log(`[WEBHOOK] Sent to ${recipient}`);
-                }
-                break;
+        // Use new alert service for email and whatsapp
+        if (actionType === 'email' || actionType === 'whatsapp') {
+            try {
+                results = await processAlertAction(alertData, actionConfig);
+                recipient = actionConfig.email || actionConfig.phone_number || '';
+            } catch (error) {
+                console.error(`[${actionType.toUpperCase()}] Error:`, error);
+                results = [{ type: actionType, success: false, error: error.message }];
+            }
+        } else if (actionType === 'alert') {
+            // System alert - just log it
+            recipient = 'system';
+            results = [{ type: 'system', success: true, result: { message_id: 'system' } }];
+            console.log(`[SYSTEM ALERT] ${equipmentName} - ${sensorType}=${value}`);
+        } else if (actionType === 'webhook') {
+            // Webhook - use existing service
+            recipient = actionConfig.webhook_url || '';
+            if (recipient) {
+                const { sendWebhook } = await import('../services/notificationService');
+                const result = await sendWebhook(recipient, {
+                    equipment: equipmentName,
+                    sensor: sensorType,
+                    value,
+                    threshold,
+                    severity,
+                    timestamp: new Date().toISOString(),
+                });
+                results = [{ type: 'webhook', success: result?.success || false, result }];
+                console.log(`[WEBHOOK] Sent to ${recipient}`);
+            }
         }
+
+        const success = results.some(r => r.success);
 
         // Add to alert feed
         const alertEntry = {
@@ -223,7 +218,7 @@ const useSimulationStore = create((set, get) => ({
             action_type: actionType,
             recipient,
             severity,
-            success: result?.success || false,
+            success,
         };
 
         set(state => ({
@@ -238,7 +233,15 @@ const useSimulationStore = create((set, get) => ({
         );
 
         // Log to database
-        logAlert('', actionType, recipient, alertContent.text, result?.success ? 'sent' : 'failed');
+        const alertText = createThresholdAlert({
+            equipmentName,
+            sensor: sensorType,
+            value,
+            threshold,
+            unit: actionConfig.unit || '',
+            severity,
+        });
+        logAlert('', actionType, recipient, alertText.text, success ? 'sent' : 'failed');
     },
 
     toggleAlertFeed: () => {
