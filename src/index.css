@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+/* === CUSTOM SCROLLBAR === */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(15, 20, 25, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.5);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8);
+}
+
+/* === ROOT STYLES === */
+:root {
+    --bg-primary: #0f1419;
+    --bg-surface: #1a2332;
+    --bg-elevated: #243044;
+    --accent-blue: #3b82f6;
+    --accent-success: #22c55e;
+    --accent-warning: #f97316;
+    --accent-danger: #ef4444;
+}
+
+html,
+body,
+#root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: #f1f5f9;
+}
+
+/* === GLASS PANELS === */
+.glass-panel {
+    backdrop-filter: blur(16px);
+    background: linear-gradient(to bottom right, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.8));
+    border: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.glass-panel-premium {
+    backdrop-filter: blur(24px);
+    background: linear-gradient(to bottom right, rgba(30, 41, 59, 0.85), rgba(15, 23, 42, 0.95));
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.glass-strong {
+    backdrop-filter: blur(24px);
+    background: linear-gradient(to bottom right, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+    border: 1px solid rgba(71, 85, 105, 0.3);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+}
+
+.glass-card {
+    backdrop-filter: blur(16px);
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(71, 85, 105, 0.4);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+}
+
+/* === INPUT STYLES === */
+.input-field {
+    background: rgba(30, 41, 59, 0.9);
+    border: 1px solid rgba(71, 85, 105, 0.5);
+    color: white;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input-field::placeholder {
+    color: rgba(148, 163, 184, 1);
+}
+
+.input-field:focus {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
+}
+
+.input-field:hover {
+    border-color: rgba(100, 116, 139, 0.5);
+}
+
+/* === GRADIENTS === */
+.gradient-primary {
+    background: linear-gradient(to right, #2563eb, #0891b2);
+}
+
+.gradient-success {
+    background: linear-gradient(to right, #16a34a, #059669);
+}
+
+.gradient-warning {
+    background: linear-gradient(to right, #f97316, #f59e0b);
+}
+
+.gradient-danger {
+    background: linear-gradient(to right, #dc2626, #e11d48);
+}
+
+/* === SEPARATOR === */
+.separator-gradient {
+    height: 1px;
+    width: 100%;
+    background: linear-gradient(to right, transparent, rgba(71, 85, 105, 0.3), transparent);
+}
+
+/* === TRANSITIONS === */
+.transition-default {
+    transition: all 0.2s ease-out;
+}
+
+/* === MODEL VIEWER === */
+model-viewer {
+    width: 100%;
+    height: 100%;
+    min-height: 500px;
+    display: block;
+    background: var(--bg-primary);
+}
+
+/* === REACTFLOW OVERRIDES === */
+.react-flow__node {
+    cursor: pointer;
+}
+
+.react-flow__edge-path {
+    stroke: #3b82f6 !important;
+    stroke-width: 2px !important;
+}
+
+.react-flow__controls {
+    background: rgba(30, 41, 59, 0.9) !important;
+    border: 1px solid rgba(71, 85, 105, 0.5) !important;
+    border-radius: 0.5rem !important;
+}
+
+.react-flow__controls button {
+    background: rgba(51, 65, 85, 1) !important;
+    border-color: rgba(71, 85, 105, 1) !important;
+    color: rgba(203, 213, 225, 1) !important;
+}
+
+.react-flow__controls button:hover {
+    background: rgba(71, 85, 105, 1) !important;
+}
+
+/* === ANIMATIONS === */
+@keyframes flash-alert {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.animate-flash {
+    animation: flash-alert 0.5s ease-in-out;
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+}
+
+/* === PROSE STYLES FOR MARKDOWN === */
+.prose-invert {
+    color: #e2e8f0;
+}
+
+.prose-invert strong {
+    color: #f1f5f9;
+    font-weight: 600;
+}
+
+.prose-invert code {
+    background: rgba(100, 116, 139, 0.3);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+}
+
+.prose-invert ul {
+    list-style-type: disc;
+    padding-left: 1.25rem;
+    margin: 0.5rem 0;
+}
+
+.prose-invert li {
+    margin: 0.25rem 0;
+}
+
+.prose-invert p {
+    margin: 0.5rem 0;
+}
+
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3 {
+    color: #f1f5f9;
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
