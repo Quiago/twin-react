@@ -28,11 +28,10 @@ export default function EquipmentLabel({ name, type, scene }) {
     }, [name, scene]);
 
     const handleCreateWorkflow = () => {
-        // Create a workflow for this component
-        const workflowId = createEmptyWorkflow(`Maintenance: ${name}`);
-        console.log(`Created workflow ${workflowId} for ${name}`);
-        // Navigate to workflow builder (assuming route exists) or just notify
-        // For now, let's just log it or maybe open a toast
+        // Create a workflow for this component with equipment info
+        const equipmentInfo = { name, type };
+        const workflowId = createEmptyWorkflow(`Maintenance: ${name}`, equipmentInfo);
+        console.log(`Created workflow ${workflowId} for ${name} (${type})`);
     };
 
     if (!name) return null;
