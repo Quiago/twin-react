@@ -89,18 +89,17 @@ function Flow() {
                 onDragOver={handleDragOver}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
-                fitView
-                fitViewOptions={{ padding: 0.2 }}
                 defaultEdgeOptions={defaultEdgeOptions}
                 connectionLineStyle={{ stroke: '#3b82f6', strokeWidth: 2 }}
                 connectionLineType="smoothstep"
-                snapToGrid
+                snapToGrid={true}
                 snapGrid={[15, 15]}
                 minZoom={0.2}
                 maxZoom={2}
                 deleteKeyCode={['Backspace', 'Delete']}
                 selectNodesOnDrag={false}
                 panOnDrag={[1, 2]}
+                proOptions={{ hideAttribution: true }}
             >
                 <Background
                     variant="dots"

@@ -2,6 +2,7 @@
 // State management for the Workflow Builder
 
 import { v4 as uuidv4 } from 'uuid';
+import { applyEdgeChanges, applyNodeChanges } from 'reactflow';
 import { create } from 'zustand';
 import * as db from '../services/database';
 import { getSensorsForType, loadEquipmentFromGLB } from '../utils/glbParser';
@@ -225,51 +226,33 @@ const useWorkflowStore = create((set, get) => ({
     // === REACTFLOW HANDLERS ===
 
     onConnect: (connection) => {
-        if (!connection) return;
-
-        const { source, target } = connection;
-        if (!source || !target) return;
-
-        const existing = get().edges.some(e => e.source === source && e.target === target);
-        if (existing) return;
-
-        const newEdge = {
-            id: `edge_${source}_${target}`,
-            source,
-            target,
-            type: 'smoothstep',
-            animated: true,
-            style: { stroke: '#3b82f6', strokeWidth: 2 },
-        };
-
-        set(state => ({ edges: [...state.edges, newEdge] }));
+        set((state) => ({
+            edges: [
+                ...state.edges,
+                {
+                    ...connection,
+                    id: `edge_${connection.source}_${connection.target}`,
+                    type: 'smoothstep',
+                    animated: true,
+                    style: { stroke: '#3b82f6', strokeWidth: 2 },
+                }
+            ]
+        }));
     },
 
     onNodesChange: (changes) => {
-        if (!changes) return;
+        set((state) => {
+            // Use ReactFlow's applyNodeChanges for proper handling
+            const updatedNodes = applyNodeChanges(changes, state.nodes);
 
-        set(state => {
-            const nodesMap = new Map(state.nodes.map(n => [n.id, n]));
-
+            // Handle side effects for selection and removal
             for (const change of changes) {
-                const { type, id } = change;
-
-                if (type === 'position' && nodesMap.has(id)) {
-                    const pos = change.position;
-                    if (pos?.x !== undefined && pos?.y !== undefined) {
-                        const node = nodesMap.get(id);
-                        nodesMap.set(id, {
-                            ...node,
-                            position: { x: pos.x, y: pos.y },
-                        });
-                    }
-                } else if (type === 'select' && nodesMap.has(id)) {
-                    if (change.selected) {
-                        const node = nodesMap.get(id);
-                        // Update selection state outside the loop
+                if (change.type === 'select' && change.selected) {
+                    const node = updatedNodes.find(n => n.id === change.id);
+                    if (node) {
                         setTimeout(() => {
                             set({
-                                selectedNodeId: id,
+                                selectedNodeId: change.id,
                                 selectedNodeCategory: node.data?.category || '',
                                 selectedNodeIsAction: node.data?.is_action || false,
                                 showConfigPanel: true,
@@ -277,37 +260,25 @@ const useWorkflowStore = create((set, get) => ({
                             get().loadNodeConfig(node);
                         }, 0);
                     }
-                } else if (type === 'remove' && nodesMap.has(id)) {
-                    nodesMap.delete(id);
-                    // Update edges and selection outside
+                } else if (change.type === 'remove') {
                     setTimeout(() => {
                         set(s => ({
-                            edges: s.edges.filter(e => e.source !== id && e.target !== id),
-                            selectedNodeId: s.selectedNodeId === id ? '' : s.selectedNodeId,
-                            showConfigPanel: s.selectedNodeId === id ? false : s.showConfigPanel,
+                            edges: s.edges.filter(e => e.source !== change.id && e.target !== change.id),
+                            selectedNodeId: s.selectedNodeId === change.id ? '' : s.selectedNodeId,
+                            showConfigPanel: s.selectedNodeId === change.id ? false : s.showConfigPanel,
                         }));
                     }, 0);
                 }
             }
 
-            return { nodes: Array.from(nodesMap.values()) };
+            return { nodes: updatedNodes };
         });
     },
 
     onEdgesChange: (changes) => {
-        if (!changes) return;
-
-        set(state => {
-            const edgesMap = new Map(state.edges.map(e => [e.id, e]));
-
-            for (const change of changes) {
-                if (change.type === 'remove' && edgesMap.has(change.id)) {
-                    edgesMap.delete(change.id);
-                }
-            }
-
-            return { edges: Array.from(edgesMap.values()) };
-        });
+        set((state) => ({
+            edges: applyEdgeChanges(changes, state.edges)
+        }));
     },
 
     // === NODE CONFIGURATION ===

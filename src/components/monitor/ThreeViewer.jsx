@@ -1,7 +1,7 @@
 // src/components/monitor/ThreeViewer.jsx
 // Pure Three.js 3D viewer with mesh selection and highlighting
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -22,6 +22,11 @@ function ThreeViewer() {
     const animationIdRef = useRef(null);
     const flashMeshRef = useRef(null);
     const flashIntervalRef = useRef(null);
+    const mouseDownPosRef = useRef({ x: 0, y: 0 });
+    const isDraggingRef = useRef(false);
+
+    const [loadingProgress, setLoadingProgress] = useState(0);
+    const [isModelLoaded, setIsModelLoaded] = useState(false);
 
     const { handle3DSelection, selectedObjectName, jsCommand, setJsCommand } = useMonitorStore();
     const { latestAlertEquipment } = useSimulationStore();
@@ -44,12 +49,14 @@ function ThreeViewer() {
         camera.position.set(8, 6, 8);
         cameraRef.current = camera;
 
-        // Renderer
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        // Renderer - Optimized settings for faster initial load
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true,
+            powerPreference: "high-performance"
+        });
         renderer.setSize(width, height);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Reduced from 2
+        renderer.shadowMap.enabled = false; // Disabled initially for performance
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.toneMapping = THREE.ACESFilmicToneMapping;
         renderer.toneMappingExposure = 1;
@@ -71,9 +78,7 @@ function ThreeViewer() {
 
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(10, 15, 10);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.castShadow = false; // Disabled for performance
         scene.add(directionalLight);
 
         const fillLight = new THREE.DirectionalLight(0x88ccff, 0.3);
@@ -85,7 +90,7 @@ function ThreeViewer() {
         gridHelper.position.y = -0.01;
         scene.add(gridHelper);
 
-        // Load GLB model
+        // Load GLB model with progress tracking
         const loader = new GLTFLoader();
         loader.load(
             '/pharmaceutical_manufacturing_machinery.glb',
@@ -104,27 +109,37 @@ function ThreeViewer() {
                 model.position.sub(center.multiplyScalar(scale));
                 model.position.y += size.y * scale / 2;
 
-                // Enable shadows and store original materials
+                // Store original materials (shadows disabled for performance)
                 model.traverse((child) => {
                     if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
-                        // Store original material for later restoration
-                        originalMaterialsRef.current.set(child.uuid, child.material.clone());
+                        child.castShadow = false;
+                        child.receiveShadow = false;
+                        // Store reference to original material (don't clone yet to avoid stack overflow)
+                        // We'll clone only when needed during highlight
+                        if (!originalMaterialsRef.current.has(child.uuid)) {
+                            originalMaterialsRef.current.set(child.uuid, child.material);
+                        }
                     }
                 });
 
                 scene.add(model);
                 controls.update();
 
+                setIsModelLoaded(true);
+                setLoadingProgress(100);
                 console.log('Model loaded successfully');
             },
             (progress) => {
-                const percent = (progress.loaded / progress.total * 100).toFixed(0);
-                console.log(`Loading model: ${percent}%`);
+                if (progress.total > 0) {
+                    // Cap at 100% to prevent display issues
+                    const percent = Math.min(100, Math.round((progress.loaded / progress.total) * 100));
+                    setLoadingProgress(percent);
+                    console.log(`Loading model: ${percent}%`);
+                }
             },
             (error) => {
                 console.error('Error loading model:', error);
+                setIsModelLoaded(true); // Hide loading screen even on error
             }
         );
 
@@ -164,41 +179,109 @@ function ThreeViewer() {
         };
     }, []);
 
-    // Handle click for mesh selection
+    // Track mouse down position
+    const handleMouseDown = useCallback((event) => {
+        mouseDownPosRef.current = { x: event.clientX, y: event.clientY };
+        isDraggingRef.current = false;
+    }, []);
+
+    // Detect if user is dragging
+    const handleMouseMove = useCallback((event) => {
+        if (mouseDownPosRef.current) {
+            const dx = event.clientX - mouseDownPosRef.current.x;
+            const dy = event.clientY - mouseDownPosRef.current.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // If mouse moved more than 5px, consider it a drag
+            if (distance > 5) {
+                isDraggingRef.current = true;
+            }
+        }
+    }, []);
+
+    // Handle click for mesh selection (only if not dragging)
     const handleClick = useCallback((event) => {
-        if (!containerRef.current || !modelRef.current || !cameraRef.current) return;
-
-        const container = containerRef.current;
-        const rect = container.getBoundingClientRect();
-
-        // Calculate normalized device coordinates
-        mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-        // Raycast
-        raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
-        const intersects = raycasterRef.current.intersectObject(modelRef.current, true);
-
-        if (intersects.length > 0) {
-            let targetObject = intersects[0].object;
-
-            // Traverse up to find the main equipment group (not just the mesh)
-            // Stop if we hit the scene or a root object that is too generic
-            while (targetObject.parent && targetObject.parent !== modelRef.current && targetObject.parent.type !== 'Scene') {
-                // Logic: if parent has a specific name, it might be the group. 
-                // In GLTF, usually logical groups are parents of meshes.
-                targetObject = targetObject.parent;
+        try {
+            // Don't select if user was dragging
+            if (isDraggingRef.current) {
+                console.log('[ThreeViewer] Click ignored - user was dragging');
+                isDraggingRef.current = false;
+                return;
             }
 
-            // Clean up the name for display
-            const rawName = targetObject.name || 'Equipment';
-            const cleanName = rawName.replace(/_/g, ' ').replace(/Node/g, '').replace(/Mesh/g, '').trim();
+            if (!containerRef.current || !modelRef.current || !cameraRef.current) {
+                console.warn('[ThreeViewer] Missing refs for click handling');
+                return;
+            }
 
-            handle3DSelection(targetObject.name); // Store raw name for identifying 3D object
-            // You might want to store clean name separately or derived in store, 
-            // but for now we keep ID consistent.
-        } else {
-            handle3DSelection(null);
+            const container = containerRef.current;
+            const rect = container.getBoundingClientRect();
+
+            // Calculate normalized device coordinates
+            mouseRef.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouseRef.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            // Raycast
+            raycasterRef.current.setFromCamera(mouseRef.current, cameraRef.current);
+            const intersects = raycasterRef.current.intersectObject(modelRef.current, true);
+
+            if (intersects.length > 0) {
+                let targetObject = intersects[0].object;
+                console.log('[ThreeViewer] Clicked object:', targetObject.name);
+
+                // Traverse up to find the first meaningful equipment group
+                // Stop at the FIRST significant parent (not the highest)
+                let currentObject = targetObject;
+                let equipmentGroup = null;
+
+                // Walk up the tree to find the first meaningful group
+                while (currentObject && currentObject !== modelRef.current) {
+                    // Check if this object has a meaningful name
+                    if (currentObject.name &&
+                        currentObject.name !== '' &&
+                        !currentObject.name.includes('_Mesh') &&
+                        !currentObject.name.includes('_primitive') &&
+                        !currentObject.name.endsWith('_Node') &&
+                        currentObject.name !== 'Scene' &&
+                        currentObject.name !== 'RootNode') {
+
+                        equipmentGroup = currentObject;
+                        console.log('[ThreeViewer] Found equipment group:', currentObject.name);
+                        // STOP here - don't keep going up
+                        break;
+                    }
+                    currentObject = currentObject.parent;
+                }
+
+                // If no meaningful group found, use the clicked object itself
+                if (!equipmentGroup) {
+                    equipmentGroup = targetObject;
+                    console.log('[ThreeViewer] No parent group found, using clicked object:', targetObject.name);
+                }
+
+                console.log('[ThreeViewer] Final selected equipment:', equipmentGroup.name);
+
+                if (equipmentGroup && equipmentGroup.name && equipmentGroup.name !== '') {
+                    console.log('[ThreeViewer] Calling handle3DSelection with:', equipmentGroup.name);
+                    handle3DSelection(equipmentGroup.name);
+                } else {
+                    console.warn('[ThreeViewer] Equipment group has no valid name, deselecting');
+                    handle3DSelection(null);
+                }
+            } else {
+                console.log('[ThreeViewer] No intersection found, deselecting');
+                handle3DSelection(null);
+            }
+        } catch (error) {
+            console.error('[ThreeViewer] Error handling click:', error);
+            console.error('[ThreeViewer] Error stack:', error.stack);
+            // Don't crash the app, just log the error
+            // Try to clear selection to recover from error state
+            try {
+                handle3DSelection(null);
+            } catch (e) {
+                console.error('[ThreeViewer] Failed to clear selection after error:', e);
+            }
         }
     }, [handle3DSelection]);
 
@@ -220,9 +303,15 @@ function ThreeViewer() {
 
         flashMeshRef.current = targetMesh;
         const originalMaterial = originalMaterialsRef.current.get(targetMesh.uuid);
-        const alertMaterial = targetMesh.material.clone();
-        alertMaterial.emissive = new THREE.Color(0xff0000);
-        alertMaterial.emissiveIntensity = 1;
+
+        // Create alert material without cloning to avoid stack overflow
+        const alertMaterial = new THREE.MeshStandardMaterial({
+            color: originalMaterial?.color || 0xffffff,
+            emissive: new THREE.Color(0xff0000),
+            emissiveIntensity: 1,
+            metalness: originalMaterial?.metalness || 0,
+            roughness: originalMaterial?.roughness || 0.5,
+        });
 
         let flashCount = 0;
 
@@ -233,15 +322,17 @@ function ThreeViewer() {
         flashIntervalRef.current = setInterval(() => {
             flashCount++;
             if (flashCount % 2 === 0) {
-                targetMesh.material = originalMaterial ? originalMaterial.clone() : targetMesh.material;
+                // Restore original material
+                targetMesh.material = originalMaterial || targetMesh.material;
             } else {
                 targetMesh.material = alertMaterial;
             }
 
             if (flashCount >= 8) {
                 clearInterval(flashIntervalRef.current);
+                // Restore original material
                 if (originalMaterial) {
-                    targetMesh.material = originalMaterial.clone();
+                    targetMesh.material = originalMaterial;
                 }
             }
         }, 250);
@@ -290,58 +381,95 @@ function ThreeViewer() {
     useEffect(() => {
         if (!modelRef.current) return;
 
-        const model = modelRef.current;
+        try {
+            const model = modelRef.current;
 
-        // Reset previous selection
-        if (selectedMeshRef.current) {
-            // Restore all children if it was a group
-            selectedMeshRef.current.traverse((child) => {
-                if (child.isMesh) {
-                    const original = originalMaterialsRef.current.get(child.uuid);
-                    if (original) {
-                        child.material = original.clone();
-                    }
-                    if (child.userData.wireframe) {
-                        child.remove(child.userData.wireframe);
-                        child.userData.wireframe = null;
-                    }
+            // Reset previous selection
+            if (selectedMeshRef.current) {
+                try {
+                    // Restore all children if it was a group
+                    selectedMeshRef.current.traverse((child) => {
+                        if (child.isMesh) {
+                            const original = originalMaterialsRef.current.get(child.uuid);
+                            if (original) {
+                                // Restore the original material directly (no cloning)
+                                child.material = original;
+                            }
+                        }
+                    });
+                } catch (error) {
+                    console.error('[ThreeViewer] Error restoring previous selection:', error);
                 }
-            });
-            selectedMeshRef.current = null;
-        }
+                selectedMeshRef.current = null;
+            }
 
-        if (!selectedObjectName) return;
+            if (!selectedObjectName) return;
 
-        // Find the object by name (it might be a group now)
-        const targetObject = model.getObjectByName(selectedObjectName);
+            // Find the object by name (it might be a group now)
+            let targetObject = model.getObjectByName(selectedObjectName);
 
-        if (targetObject) {
+            // If exact match not found, try to find by partial match (case insensitive)
+            if (!targetObject) {
+                console.warn('[ThreeViewer] Exact match not found, trying partial match for:', selectedObjectName);
+                model.traverse((child) => {
+                    if (!targetObject && child.name &&
+                        child.name.toLowerCase().includes(selectedObjectName.toLowerCase())) {
+                        targetObject = child;
+                        console.log('[ThreeViewer] Found partial match:', child.name);
+                    }
+                });
+            }
+
+            if (!targetObject) {
+                console.warn('[ThreeViewer] Object not found (even with partial match):', selectedObjectName);
+                // Don't crash - just log available names for debugging
+                const availableNames = [];
+                model.traverse((child) => {
+                    if (child.name && child.name !== '' && child.isMesh) {
+                        availableNames.push(child.name);
+                    }
+                });
+                console.log('[ThreeViewer] Available mesh names:', availableNames.slice(0, 20));
+                return;
+            }
+
             selectedMeshRef.current = targetObject;
 
             // Highlight all meshes in this object/group
             targetObject.traverse((child) => {
-                if (child.isMesh) {
-                    // Create bright highlight material
-                    const highlightMaterial = child.material.clone();
-                    highlightMaterial.emissive = new THREE.Color(0x00ffff);
-                    highlightMaterial.emissiveIntensity = 0.8;
-                    highlightMaterial.transparent = true;
-                    highlightMaterial.opacity = 1;
-                    child.material = highlightMaterial;
+                if (child.isMesh && child.material) {
+                    try {
+                        // Store original if not already stored
+                        if (!originalMaterialsRef.current.has(child.uuid)) {
+                            originalMaterialsRef.current.set(child.uuid, child.material);
+                        }
 
-                    // Add wireframe
-                    const wireframeMaterial = new THREE.MeshBasicMaterial({
-                        color: 0x00ffff,
-                        wireframe: true,
-                        transparent: true,
-                        opacity: 0.4,
-                    });
-                    const wireframeMesh = new THREE.Mesh(child.geometry, wireframeMaterial);
-                    wireframeMesh.scale.setScalar(1.01);
-                    child.add(wireframeMesh);
-                    child.userData.wireframe = wireframeMesh;
+                        // Create a new simple material for highlighting
+                        // Avoid cloning to prevent stack overflow with circular references
+                        const originalMat = child.material;
+                        const highlightMaterial = new THREE.MeshStandardMaterial({
+                            color: originalMat.color || 0xffffff,
+                            emissive: new THREE.Color(0x00ffff),
+                            emissiveIntensity: 1.2,  // Increased for better visibility
+                            transparent: true,
+                            opacity: 1,
+                            metalness: originalMat.metalness || 0,
+                            roughness: originalMat.roughness || 0.5,
+                        });
+
+                        child.material = highlightMaterial;
+
+                        // Don't add wireframe - it can cause hierarchy issues
+                        // Just use the bright emissive material for highlighting
+                    } catch (error) {
+                        console.error('[ThreeViewer] Error highlighting mesh:', child.name, error);
+                    }
                 }
             });
+
+            console.log('[ThreeViewer] Successfully highlighted:', selectedObjectName);
+        } catch (error) {
+            console.error('[ThreeViewer] Error in selection effect:', error);
         }
     }, [selectedObjectName]);
 
@@ -350,16 +478,35 @@ function ThreeViewer() {
             ref={containerRef}
             className="w-full h-full relative cursor-pointer"
             onClick={handleClick}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
         >
-            {/* Loading overlay (shows briefly) */}
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center bg-[#0a0e14] opacity-0 transition-opacity duration-500" id="loading-overlay">
-                <div className="text-blue-400 text-sm">Loading 3D Model...</div>
-            </div>
+            {/* Loading overlay with progress bar */}
+            {!isModelLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-[#0a0e14] z-10">
+                    <div className="text-center">
+                        <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                        <div className="text-blue-400 text-sm mb-2">Loading 3D Model...</div>
+                        <div className="w-64 h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                                className="h-full bg-blue-500 transition-all duration-300"
+                                style={{ width: `${loadingProgress}%` }}
+                            ></div>
+                        </div>
+                        <div className="text-slate-500 text-xs mt-2">{loadingProgress}%</div>
+                        <div className="text-slate-600 text-xs mt-1">
+                            {loadingProgress < 100 ? 'Downloading model (23 MB)...' : 'Processing...'}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Info overlay */}
-            <div className="absolute bottom-4 left-4 text-xs text-slate-500 pointer-events-none">
-                Click on equipment to inspect • Drag to rotate • Scroll to zoom
-            </div>
+            {isModelLoaded && (
+                <div className="absolute bottom-4 left-4 text-xs text-slate-500 pointer-events-none">
+                    Click on equipment to inspect • Drag to rotate • Scroll to zoom
+                </div>
+            )}
 
             {/* Gradient overlay */}
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#0f1419]/30 via-transparent to-transparent" />

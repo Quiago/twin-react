@@ -1,5 +1,8 @@
 // src/services/notificationService.js
-// Notification service (mock mode for frontend)
+// Notification service with real email and WhatsApp support
+
+// Check if mock mode is enabled
+const MOCK_MODE = import.meta.env.VITE_NOTIFICATION_MOCK_MODE === 'true';
 
 /**
  * Notification result object
@@ -36,28 +39,139 @@ function mockNotification(channel, recipient, message) {
 }
 
 /**
- * Send WhatsApp message (mock).
- * 
- * @param {string} phoneNumber - Recipient phone number
+ * Send WhatsApp message via Meta WhatsApp Business API.
+ *
+ * @param {string} phoneNumber - Recipient phone number (formato: +1234567890)
  * @param {string} message - Message text
  * @returns {Promise<NotificationResult>}
  */
 export async function sendWhatsApp(phoneNumber, message) {
-    // In production, this would call the WhatsApp Business API
-    return mockNotification('whatsapp', phoneNumber, message);
+    if (MOCK_MODE) {
+        return mockNotification('whatsapp', phoneNumber, message);
+    }
+
+    try {
+        const apiVersion = import.meta.env.VITE_WHATSAPP_API_VERSION || 'v18.0';
+        const phoneId = import.meta.env.VITE_WHATSAPP_PHONE_ID;
+        const accessToken = import.meta.env.VITE_WHATSAPP_ACCESS_TOKEN;
+
+        if (!phoneId || !accessToken) {
+            throw new Error('WhatsApp credentials not configured');
+        }
+
+        const url = `https://graph.facebook.com/${apiVersion}/${phoneId}/messages`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                messaging_product: 'whatsapp',
+                to: phoneNumber.replace(/\D/g, ''), // Remove non-digits
+                type: 'text',
+                text: {
+                    body: message
+                }
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error?.message || 'WhatsApp API error');
+        }
+
+        console.log('[WhatsApp] Message sent successfully:', data);
+
+        return new NotificationResult(
+            true,
+            'whatsapp',
+            phoneNumber,
+            data.messages?.[0]?.id || 'sent'
+        );
+    } catch (error) {
+        console.error('[WhatsApp] Error sending message:', error);
+        return new NotificationResult(
+            false,
+            'whatsapp',
+            phoneNumber,
+            null,
+            error.message
+        );
+    }
 }
 
 /**
- * Send email (mock).
- * 
+ * Send email using Web3Forms API (free service for frontend).
+ *
  * @param {string} email - Recipient email
  * @param {string} subject - Email subject
  * @param {string} body - Email body
  * @returns {Promise<NotificationResult>}
  */
 export async function sendEmail(email, subject, body) {
-    // In production, this would call an email API
-    return mockNotification('email', email, `${subject}: ${body}`);
+    if (MOCK_MODE) {
+        return mockNotification('email', email, `${subject}: ${body}`);
+    }
+
+    try {
+        // Using SMTP.js or similar would require backend
+        // For frontend-only solution, we'll use a simple notification approach
+
+        // Option 1: Use Web3Forms (free, no backend needed)
+        const response = await fetch('https://api.web3forms.com/submit', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                access_key: '8a2c4e6f-1d3b-4a9e-8c7f-2b5d9e1a3c6f', // You need to get your own from web3forms.com
+                to: email,
+                from: import.meta.env.VITE_EMAIL_USERNAME || 'noreply@nexus.com',
+                subject: subject,
+                message: body,
+                from_name: import.meta.env.VITE_EMAIL_FROM_NAME || 'Nexus Floor Control'
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            // Fallback: Log to console and show in UI
+            console.log('[Email] Would send:', { to: email, subject, body });
+            throw new Error(data.message || 'Email sending failed');
+        }
+
+        console.log('[Email] Sent successfully:', data);
+
+        return new NotificationResult(
+            true,
+            'email',
+            email,
+            data.message_id || 'sent'
+        );
+    } catch (error) {
+        console.error('[Email] Error:', error);
+
+        // For now, log the email that would have been sent
+        console.log('[Email] Notification (not sent):', {
+            to: email,
+            subject,
+            body,
+            error: error.message
+        });
+
+        return new NotificationResult(
+            false,
+            'email',
+            email,
+            null,
+            error.message
+        );
+    }
 }
 
 /**
