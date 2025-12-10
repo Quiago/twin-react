@@ -14,6 +14,10 @@ const useMonitorStore = create((set, get) => ({
     // === JS COMMANDS (for model-viewer) ===
     jsCommand: '',
 
+    // === MODALS ===
+    activeModal: null, // 'manual', 'history', null
+    modalData: null,
+
     // === EQUIPMENT PROPERTIES ===
     equipmentTemp: 0,
     equipmentPressure: 0,
@@ -24,6 +28,45 @@ const useMonitorStore = create((set, get) => ({
     equipmentDependsOn: [],
     equipmentAffects: [],
     equipmentProduct: '',
+
+    openModal: (type) => {
+        const { selectedObjectName, selectedObjectType } = get();
+        let data = {};
+
+        if (type === 'manual') {
+            data = {
+                title: `${selectedObjectName} - Operating Manual`,
+                version: 'v2.4.1',
+                lastUpdated: '2025-10-15',
+                sections: [
+                    { title: 'Safety Procedures', content: 'Ensure E-Stop is disengaged before startup. Verify pressure valves are open.' },
+                    { title: 'Normal Operation', content: 'Set desired RPM/Flow rate via the control panel. Monitor vibration levels continuously.' },
+                    { title: 'Maintenance', content: 'Weekly lubrication of bearings required. Check sensor calibration monthly.' },
+                    { title: 'Troubleshooting', content: 'If vibration > 3mm/s, initiate emergency shutdown sequence immediately.' }
+                ]
+            };
+        } else if (type === 'history') {
+            // Generate random history events
+            const events = [];
+            const types = ['Maintenance', 'Alert', 'Calibration', 'Operator'];
+            for (let i = 0; i < 8; i++) {
+                const date = new Date();
+                date.setDate(date.getDate() - i * 3);
+                events.push({
+                    id: i,
+                    date: date.toISOString().split('T')[0],
+                    type: types[Math.floor(Math.random() * types.length)],
+                    description: `Routine check and verification of ${selectedObjectType} parameters.`,
+                    user: `User-${Math.floor(Math.random() * 59) + 10}`
+                });
+            }
+            data = { events };
+        }
+
+        set({ activeModal: type, modalData: data });
+    },
+
+    closeModal: () => set({ activeModal: null, modalData: null }),
 
     // === ACTIONS ===
 

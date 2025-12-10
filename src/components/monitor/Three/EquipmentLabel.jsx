@@ -2,12 +2,14 @@ import { Html } from '@react-three/drei';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as THREE from 'three';
+import useMonitorStore from '../../../stores/useMonitorStore';
 import useWorkflowStore from '../../../stores/useWorkflowStore';
 
 export default function EquipmentLabel({ name, type, scene }) {
     const [position, setPosition] = useState([0, 0, 0]);
     const navigate = useNavigate();
     const { createEmptyWorkflow } = useWorkflowStore();
+    const { openModal } = useMonitorStore();
 
     useEffect(() => {
         // Find the object position to place the label
@@ -56,15 +58,24 @@ export default function EquipmentLabel({ name, type, scene }) {
 
                 <div className="border-t border-slate-700 pt-2 flex flex-col gap-1">
                     <button
-                        onClick={handleCreateWorkflow}
+                        onClick={() => {
+                            handleCreateWorkflow();
+                            navigate('/workflow-builder');
+                        }}
                         className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white py-1 px-2 rounded w-full transition-colors flex items-center justify-center gap-1"
                     >
                         <span>⚡</span> Create Workflow
                     </button>
-                    <button className="text-xs hover:bg-slate-700 text-slate-300 py-1 px-2 rounded w-full text-left">
+                    <button
+                        onClick={() => openModal('manual')}
+                        className="text-xs hover:bg-slate-700 text-slate-300 py-1 px-2 rounded w-full text-left"
+                    >
                         View Manual
                     </button>
-                    <button className="text-xs hover:bg-slate-700 text-slate-300 py-1 px-2 rounded w-full text-left">
+                    <button
+                        onClick={() => openModal('history')}
+                        className="text-xs hover:bg-slate-700 text-slate-300 py-1 px-2 rounded w-full text-left"
+                    >
                         History Logs
                     </button>
                 </div>

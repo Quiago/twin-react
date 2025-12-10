@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, MessageCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import ChatPanel from '../components/monitor/ChatPanel';
 import ContextMenu from '../components/monitor/ContextMenu';
+import InfoModal from '../components/monitor/InfoModal';
 import LiveMonitor from '../components/monitor/LiveMonitor';
 import ThreeViewer from '../components/monitor/ThreeViewer';
 import useMonitorStore from '../stores/useMonitorStore';
@@ -42,6 +43,7 @@ function Monitor() {
                 {/* LEFT: 3D Viewer Area */}
                 <div className="flex-1 min-w-0 relative">
                     <ThreeViewer />
+                    <InfoModal />
 
                     {/* Overlay: Context Menu + Knowledge Graph */}
                     {selectedObjectName && (

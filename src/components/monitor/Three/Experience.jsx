@@ -1,5 +1,7 @@
 import { Environment, OrbitControls, useGLTF } from '@react-three/drei';
+import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
 import useMonitorStore from '../../../stores/useMonitorStore';
 import useSimulationStore from '../../../stores/useSimulationStore';
 import { classifyEquipment, findMeaningfulGroup, flashGroup } from '../../../utils/equipment-utils';
@@ -115,6 +117,9 @@ export default function Experience() {
             <ambientLight intensity={0.5} />
             <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
 
+            {/* Handle Focus/Isolate Animation */}
+            <FocusHandler />
+
             {/* Main Model */}
             <primitive
                 object={scene}
@@ -134,4 +139,69 @@ export default function Experience() {
             )}
         </>
     );
+}
+
+// Sub-component to handle camera animation
+function FocusHandler() {
+    const { isExpanded, selectedObjectName } = useMonitorStore();
+    const { camera, scene, controls } = useThree();
+
+    // Camera Animation Logic
+    useFrame((state, delta) => {
+        if (!controls) return;
+
+        if (isExpanded && selectedObjectName) {
+            // Find target
+            const targetObj = scene.getObjectByName(selectedObjectName);
+            if (targetObj) {
+                // Get Center
+                const box = new THREE.Box3().setFromObject(targetObj);
+                const center = box.getCenter(new THREE.Vector3());
+
+                // Smoothly move target
+                controls.target.lerp(center, 4 * delta);
+                controls.update();
+            }
+        }
+    });
+
+    // Handle "Isolate" Visual Effect
+    useEffect(() => {
+        scene.traverse((obj) => {
+            if (obj.isMesh) {
+                if (!obj.userData.originalMaterial) {
+                    // Save original if not saved yet (though we did it in parent useEffect)
+                    // But safety first
+                    obj.userData.originalMaterial = obj.material.clone();
+                }
+
+                if (isExpanded && selectedObjectName) {
+                    // Check if this obj belongs to selected group
+                    const group = findMeaningfulGroup(obj);
+                    const isSelected = group.name === selectedObjectName;
+
+                    if (!isSelected) {
+                        // Make transparent/ghost
+                        // We need to clone material to not affect shared materials
+                        // Actually, for performance, shared materials are better,
+                        // but for per-object transparency we might need unique mats
+                        // or modify the shared one if it's unique enough.
+                        // Let's assume simplest: clone
+                        const ghostMat = obj.userData.originalMaterial.clone();
+                        ghostMat.transparent = true;
+                        ghostMat.opacity = 0.1;
+                        obj.material = ghostMat;
+                    } else {
+                        // Restore original
+                        obj.material = obj.userData.originalMaterial;
+                    }
+                } else {
+                    // Restore all
+                    obj.material = obj.userData.originalMaterial;
+                }
+            }
+        });
+    }, [isExpanded, selectedObjectName, scene]);
+
+    return null;
 }
