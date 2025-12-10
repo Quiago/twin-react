@@ -6,6 +6,7 @@ import { create } from 'zustand';
 const useMonitorStore = create((set, get) => ({
     // === 3D SELECTION ===
     selectedObjectName: '',
+    selectedObjectType: 'unknown',
     menuMode: 'main', // main, actions
     isExpanded: false,
     isAlertActive: false,
@@ -26,10 +27,11 @@ const useMonitorStore = create((set, get) => ({
 
     // === ACTIONS ===
 
-    handle3DSelection: (objectName) => {
+    handle3DSelection: (objectName, objectType = 'unknown') => {
         if (!objectName) {
             set({
                 selectedObjectName: '',
+                selectedObjectType: 'unknown',
                 menuMode: 'main',
                 isExpanded: false,
                 jsCommand: 'restore',
@@ -45,6 +47,7 @@ const useMonitorStore = create((set, get) => ({
 
         set({
             selectedObjectName: objectName,
+            selectedObjectType: objectType,
             menuMode: 'main',
             equipmentTemp: Math.round((Math.random() * 40 + 45) * 10) / 10,
             equipmentPressure: Math.round((Math.random() * 150 + 100) * 10) / 10,
@@ -71,6 +74,7 @@ const useMonitorStore = create((set, get) => ({
     clearSelection: () => {
         set({
             selectedObjectName: '',
+            selectedObjectType: 'unknown',
             menuMode: 'main',
             isExpanded: false,
             jsCommand: 'restore',

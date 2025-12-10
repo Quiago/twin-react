@@ -19,14 +19,6 @@ export default defineConfig({
     },
     // Increase chunk size warning limit (23 MB GLB model)
     chunkSizeWarningLimit: 1000,
-    // Enable minification
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: false, // Keep console for debugging
-        drop_debugger: true,
-      },
-    },
   },
   // Optimize dependencies
   optimizeDeps: {

@@ -1,8 +1,8 @@
 // src/stores/useWorkflowStore.js
 // State management for the Workflow Builder
 
-import { v4 as uuidv4 } from 'uuid';
 import { applyEdgeChanges, applyNodeChanges } from 'reactflow';
+import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import * as db from '../services/database';
 import { getSensorsForType, loadEquipmentFromGLB } from '../utils/glbParser';
@@ -394,6 +394,79 @@ const useWorkflowStore = create((set, get) => ({
             showConfigPanel: false,
             nodeCounter: 0,
         });
+    },
+
+    createEmptyWorkflow: (name, equipmentInfo = null) => {
+        const workflowId = uuidv4();
+
+        // Initialize with empty state
+        let nodes = [];
+        let edges = [];
+        let nodeCounter = 0;
+
+        // If specific equipment provided, add a node for it
+        if (equipmentInfo && equipmentInfo.type) {
+            const categoryDefinitions = get().categoryDefinitions;
+            const catInfo = categoryDefinitions.find(c => c.key === equipmentInfo.type);
+
+            if (catInfo) {
+                nodeCounter = 1;
+                const nodeId = `node_${nodeCounter}`;
+                const color = catInfo.color || 'gray';
+
+                // Color helpers (duplicated from handleDrop - should be refactored but inline for now)
+                const bgColors = {
+                    purple: '#581c87', blue: '#1e3a8a', cyan: '#164e63',
+                    green: '#14532d', yellow: '#713f12',
+                };
+                const borderColors = {
+                    purple: '#a855f7', blue: '#3b82f6', cyan: '#22d3ee',
+                    green: '#22c55e', yellow: '#eab308',
+                };
+
+                nodes.push({
+                    id: nodeId,
+                    type: 'default',
+                    position: { x: 100, y: 100 },
+                    data: {
+                        label: equipmentInfo.name,
+                        category: equipmentInfo.type,
+                        is_action: false,
+                        configured: true, // Auto-configured for simplicity
+                        config: {
+                            specific_equipment_id: equipmentInfo.name // Pre-select this exact unit
+                        },
+                    },
+                    style: {
+                        background: bgColors[color] || '#1f2937',
+                        color: 'white',
+                        border: `2px solid ${borderColors[color] || '#6b7280'}`,
+                        borderRadius: '8px',
+                        padding: '10px 15px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        minWidth: '120px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                    },
+                    sourcePosition: 'right',
+                    targetPosition: 'left',
+                });
+            }
+        }
+
+        set({
+            nodes,
+            edges,
+            currentWorkflowId: workflowId,
+            currentWorkflowName: name || 'New Workflow',
+            currentWorkflowStatus: 'draft',
+            selectedNodeId: nodes.length > 0 ? nodes[0].id : '',
+            showConfigPanel: nodes.length > 0,
+            nodeCounter: nodeCounter,
+        });
+
+        return workflowId;
     },
 
     saveWorkflow: () => {
